@@ -1,9 +1,12 @@
 import pandas as pd
+import torch
 from torch.utils.data import Dataset
 
-import gen_dataset
+from . import gen_dataset
 
 STOCK_DAYS_PER_YEAR = 252  # Number of days stock market is typically open in one year
+INPUT_DAYS = int(STOCK_DAYS_PER_YEAR / 2)
+OUTPUT_DAYS = STOCK_DAYS_PER_YEAR - INPUT_DAYS
 
 
 class BasicPreprocessor:
@@ -27,18 +30,20 @@ class BasicPreprocessor:
         """
         maxes = data.max()
         mins = data.min()
-        data = ((data - mins) / (maxes - mins)).to_numpy()
+        data = ((data - mins) / (maxes - mins)).to_numpy(dtype="float32")
         if labels is not None:
             labels = (labels - mins["close"]) / (maxes["close"] - mins["close"])
-        return data, labels, {"min": mins["close"], "max": maxes["close"]}
+        return data, labels.to_numpy(dtype="float32"), {"min": mins["close"], "max": maxes["close"]}
 
-    def unscaleLabels(self, labels, unscale_params):
+    def unscaleLabels(self, labels, unscale_params: dict):
         """
         Unscales the labels (predicted or ground truth)
         Params:
           - labels: The labels to unscale
           - unscale_params: The parameters from unscaling (from the __call__ function)
         """
+        if type(labels) is torch.Tensor:
+            unscale_params = {k: v.reshape(*v.shape, 1) for k, v in unscale_params.items()}
         return (labels * (unscale_params["max"] - unscale_params["min"])) + unscale_params["min"]
 
 
@@ -73,6 +78,6 @@ class BasicStockData(Dataset):
         ticker = self.pairs[idx][0]
         start_idx = self.pairs[idx][1]
         stock_info = self.data.loc[ticker][start_idx : start_idx + STOCK_DAYS_PER_YEAR]
-        label = stock_info[: STOCK_DAYS_PER_YEAR / 2]["close"]
-        data = stock_info[STOCK_DAYS_PER_YEAR / 2 :]
+        label = stock_info[:OUTPUT_DAYS]["close"]
+        data = stock_info[OUTPUT_DAYS:]
         return self.preprocessor(data, label)

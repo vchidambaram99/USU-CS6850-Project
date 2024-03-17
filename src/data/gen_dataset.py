@@ -166,7 +166,7 @@ def main():
     Main function for gen_dataset.py, downloads data from NASDAQ based on command line arguments
     """
     parser = argparse.ArgumentParser(
-        prog="GenDataset", description="Downloads data from NASDAQ's historical stock price API"
+        prog="gen_dataset", description="Downloads data from NASDAQ's historical stock price API"
     )
     parser.add_argument("stock_file", help="File containing stock tickers to download data for")
     parser.add_argument("data_path", help="Folder to place downloaded data into")
