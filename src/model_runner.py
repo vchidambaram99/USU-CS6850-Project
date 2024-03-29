@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import json
 from data import dataset
 from models import models
 from torch.utils.data import DataLoader
@@ -11,16 +12,35 @@ def train(args):
     Params:
       - args: Namespace containing parsed arguments
     """
-    model = models.load_model(args.model_type, args.model_file)
-    train_loader = DataLoader(
-        dataset.BasicStockData(f"{args.data_path}/{args.dataset}_train.parquet"), batch_size=64, shuffle=True
-    )
-    valid_loader = DataLoader(dataset.BasicStockData(f"{args.data_path}/{args.dataset}_valid.parquet"), batch_size=64)
+    model = models.load_model(args.model_config["model"], args.model_file)
+    train_file = f"{args.data_path}/{args.dataset}_train.parquet"
+    valid_file = f"{args.data_path}/{args.dataset}_valid.parquet"
+    supp_file = f"{args.data_path}/{args.dataset}_supplementary.parquet"
+    preprocs = args.model_config["data"]["preprocessors"]
+    train_loader = DataLoader(dataset.StockData(train_file, supp_file, preprocs), batch_size=64, shuffle=True)
+    valid_loader = DataLoader(dataset.StockData(valid_file, supp_file, preprocs), batch_size=64)
     model.train(train_loader, valid_loader)
 
 
 def test(args):
     pass
+
+
+def read_model_config(file: str):
+    """
+    Read a json model configuration
+    Params:
+      - file: Path to the json model configuration
+    Returns: Loaded json model configuration as dict
+    """
+    with open(file) as f:
+        conf = json.load(f)
+        preprocs = conf["data"]["preprocessors"]
+        for i in range(len(preprocs)):
+            assert len(preprocs[i]) == 1, "Each preprocessor should consist of one column and one preprocessor function"
+            for k, v in preprocs[i].items():
+                preprocs[i] = (k, dataset.getPreproc(v))
+        return conf
 
 
 def main():
@@ -35,10 +55,11 @@ def main():
     parser_test.set_defaults(func=test)
     parser.add_argument("--data-path", help="Where the data is located", required=True)
     parser.add_argument("--dataset", help="The name of the dataset", required=True)
-    parser.add_argument("--model-type", help="The type of the model")
+    parser.add_argument("--model-config", help="The configuration for the model", required=True, type=str)
     parser.add_argument("--model-file", help="Where to load model from or save model to")
 
     args = parser.parse_args()
+    args.model_config = read_model_config(args.model_config)
     args.func(args)
 
 

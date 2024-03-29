@@ -1,0 +1,15 @@
+{
+    "data": {
+        "preprocessors": [{"close": "MinMaxScaler"}]
+    },
+    "model": {
+        "type": "NeuralNetwork",
+        "layers": [
+            {"type": "Linear", "args": [126, 126]},
+            {"type": "ReLU"},
+            {"type": "Linear", "args": [126, 21]},
+            {"type": "ReLU"},
+            {"type": "Linear", "args": [21, 21]}
+        ]
+    }
+}

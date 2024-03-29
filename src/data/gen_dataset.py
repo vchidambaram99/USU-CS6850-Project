@@ -56,14 +56,17 @@ def stock_prices(ticker: str, start_date: datetime.date, end_date: datetime.date
             print(f"Failed to get data for ticker {ticker}: {data}")
             return None
         table = pd.DataFrame(index=pd.DatetimeIndex([], name="date"))
+        colMap = {"close": "close", "open": "open", "high": "high", "low": "low"}
+        if asset_class == "stocks":
+            colMap["volume"] = "volume"
+        elif asset_class == "mutualfunds":
+            colMap["close"] = "adjustedClose"
         clean_regex = re.compile("[$,]")
-        as_float = lambda x: float(clean_regex.sub("", x))
         rows = data["data"]["tradesTable"]["rows"]
-        table["close"] = pd.Series([as_float(r["close"]) for r in rows], index=[r["date"] for r in rows])
-        table["open"] = pd.Series([as_float(r["open"]) for r in rows], index=[r["date"] for r in rows])
-        table["high"] = pd.Series([as_float(r["high"]) for r in rows], index=[r["date"] for r in rows])
-        table["low"] = pd.Series([as_float(r["low"]) for r in rows], index=[r["date"] for r in rows])
-        table["volume"] = pd.Series([as_float(r["volume"]) for r in rows], index=[r["date"] for r in rows])
+        for column, jsonKey in colMap.items():
+            table[column] = pd.Series(
+                [float(clean_regex.sub("", r[jsonKey])) for r in rows], index=[r["date"] for r in rows]
+            )
         return table
     except Exception as e:
         print(f"Failed to get data for ticker {ticker}: {e}")
@@ -157,8 +160,12 @@ def gen_dataset(
         dataset = pd.concat([dataset, all_data.loc[stock_split]])
         dataset.to_parquet(f"{data_path}/{data_name}_{dataset_name}.parquet")
 
-    # TODO create supplementary file with index data
-    # df.to_parquet(f"{data_path}/{data_name}_supplementary.parquet")
+    # Create supplementary file with index data (not using S&P 500 because data collection only started in 2015)
+    supplementary = pd.DataFrame()
+    for ticker, asset_type in [("DJIA", "etf"), ("COMP", "index")]:
+        table = stock_prices(ticker, start_date, end_date, asset_type)
+        supplementary = pd.concat([supplementary, pd.concat({ticker: table}, names=["ticker"])])
+    supplementary.to_parquet(f"{data_path}/{data_name}_supplementary.parquet")
 
 
 def main():

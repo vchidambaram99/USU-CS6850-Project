@@ -3,7 +3,6 @@ import os
 import pickle
 from torch import nn
 from torch.utils.data import DataLoader
-from data import dataset
 
 
 class NeuralModel:
@@ -43,7 +42,7 @@ class NeuralModel:
           - loss_fn: The loss function to optimize
           - optimizer: The optimizer to use on the model
         """
-        losses = self.load_loss()
+        losses = self.load_losses()
         if len(losses) == 0:
             best_valid_loss = self.eval(valid_loader, loss_fn)
             best_epoch = 0
@@ -79,21 +78,21 @@ class NeuralModel:
                 best_valid_loss = valid_loss
                 best_epoch = epoch + 1
                 stop_count = 0
-                torch.save(self.model, self.model_file)
+                torch.save(self.model.state_dict(), self.model_file)
                 print(f"  Saving updated model to {self.model_file}")
                 if save_loss:  # only save updated losses if the model itself is being saved
-                    save_loss(losses)
+                    self.save_losses(losses)
             else:
                 stop_count += 1
                 if stop_count >= early_stop:
                     print(f"  Exiting model training early after {epoch + 1} epochs")
                     return
 
-    def save_loss(self, loss):
+    def save_losses(self, loss):
         with open(f"{self.model_file}.loss", "wb") as f:
             pickle.dump(loss, f)
 
-    def load_loss(self):
+    def load_losses(self):
         try:
             with open(f"{self.model_file}.loss", "rb") as f:
                 return pickle.load(f)
@@ -106,44 +105,35 @@ class NeuralModel:
         Params:
           - test_loader: Data loader for dataset to evaluate on
           - loss_fn: The loss function to evaluate
-        Returns: (loss on preprocessed data, loss on raw data)
+        Returns: Average loss
         """
         self.model.eval()
-        preproc = test_loader.dataset.preprocessor
         total_loss = 0
-        total_loss_raw = 0
         size = len(test_loader.dataset)
         with torch.no_grad():
             for _, (X, y, unscale_params) in enumerate(test_loader):
                 # Compute prediction error on preprocessed data
                 pred = self.model(X)
                 total_loss += loss_fn(pred, y).item() * len(X)
-
-                # Compute prediction error on raw data
-                total_loss_raw += loss_fn(
-                    preproc.unscaleLabels(pred, unscale_params), preproc.unscaleLabels(y, unscale_params)
-                ).item() * len(X)
-        return (total_loss / size, total_loss_raw / size)
+        return total_loss / size
 
 
-class BasicFeedForward(nn.Module):
+class ConfigurableNetwork(nn.Module):
     """
-    Basic feedforward neural network for stock price prediction
+    NeuralNetwork configurable by JSON file
     """
 
-    def __init__(self):
+    def __init__(self, model_config: dict):
         """
         Initialize the neural network layers
+        Params:
+          - model_config: Dictionary describing model structure
         """
         super().__init__()
-        self.flatten = nn.Flatten()
-        self.linear_relu_stack = nn.Sequential(
-            nn.Linear(dataset.INPUT_DAYS * 5, dataset.INPUT_DAYS),
-            nn.Tanh(),
-            nn.Linear(dataset.INPUT_DAYS, dataset.OUTPUT_DAYS),
-            nn.ReLU(),
-            nn.Linear(dataset.OUTPUT_DAYS, dataset.OUTPUT_DAYS),
-        )
+        self.layers = nn.ModuleList()
+        for layer in model_config["layers"]:
+            LayerClass = getattr(nn, layer["type"])
+            self.layers.append(LayerClass(*layer.get("args", []), **layer.get("kwargs", {})))
 
     def forward(self, x):
         """
@@ -151,23 +141,25 @@ class BasicFeedForward(nn.Module):
         Params:
           - x: The input variables
         """
-        return self.linear_relu_stack(self.flatten(x))
+        for layer in self.layers:
+            x = layer(x)
+        return x
 
 
-def load_model(model_name: str, model_file: str):
+def load_model(model_config: dict, model_file: str):
     """
-    Get a model wrapper by the name of the model and the file it should be stored at
+    Get a model wrapper by configuration and optionally the file it should be stored at
     Params:
-      - model_name: The name of the model
+      - model_config: The configuration of the model
       - model_file: Path to file where model is stored
     Returns: A wrapper around the model
     """
-    if model_name is None and model_file is None:
-        raise ValueError("Either model type or model file must be provided")
-    if os.path.exists(model_file):
-        return NeuralModel(torch.load(model_file), model_file)
-    match model_name:
-        case "BasicFeedForward":
-            return NeuralModel(BasicFeedForward(), model_file)
+    model_type = model_config["type"]
+    match model_type:
+        case "NeuralNetwork":
+            network = ConfigurableNetwork(model_config)
+            if os.path.exists(model_file):
+                network.load_state_dict(torch.load(model_file))
+            return NeuralModel(network, model_file)
         case _:
-            raise ValueError(f"No model by name '{model_name}' and no file at '{model_file}'")
+            raise ValueError(f"No model of type '{model_type}'")
