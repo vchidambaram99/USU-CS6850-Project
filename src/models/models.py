@@ -48,12 +48,13 @@ class NeuralModel:
             best_epoch = 0
             losses.append(best_valid_loss)
         else:
-            best_valid_loss = max(losses)
+            best_valid_loss = min(losses)
             best_epoch = losses.index(best_valid_loss)
         stop_count = 0
         optimizer = optimizer(self.model.parameters())
         for epoch in range(max_epochs):
             print(f"Epoch {epoch + 1}:")
+            train_loader.dataset.shuffle()
             size = len(train_loader.dataset)
             current = 0
             self.model.train()
@@ -67,10 +68,14 @@ class NeuralModel:
                 optimizer.step()
                 optimizer.zero_grad()
 
+                # Print progress every 100 batches
                 current += len(X)
-                if batch % 100 == 0:  # Print progress every 100 batches
+                if batch % 100 == 0:
                     loss = loss.item()
                     print(f"  loss: {loss:.5f}\t[{current-len(X)}-{current}/{size}]")
+
+            # Evaluate on validation set to determine if training should be stopped early
+            valid_loader.dataset.shuffle()
             valid_loss = self.eval(valid_loader)
             losses.append(valid_loss)
             print(f"  Validation Loss: {valid_loss} (previous best {best_valid_loss} on epoch {best_epoch})")

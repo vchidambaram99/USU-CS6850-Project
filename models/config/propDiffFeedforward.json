@@ -1,10 +1,13 @@
 {
     "data": {
-        "preprocessors": [{"close": "MinMaxScaler"}]
+        "preprocessors": [
+            {"name": "ProportionalDiff", "args": ["close"]}
+        ]
     },
     "model": {
         "type": "NeuralNetwork",
         "layers": [
+            {"type": "Flatten"},
             {"type": "Linear", "args": [126, 126]},
             {"type": "ReLU"},
             {"type": "Linear", "args": [126, 21]},

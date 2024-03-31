@@ -24,6 +24,7 @@ nvidia-nvjitlink-cu12==12.4.99
 nvidia-nvtx-cu12==12.1.105
 packaging==24.0
 pandas==2.2.1
+polars==0.20.17
 pyarrow==15.0.1
 python-dateutil==2.9.0.post0
 pytz==2024.1

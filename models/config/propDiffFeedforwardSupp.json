@@ -1,0 +1,20 @@
+{
+    "data": {
+        "preprocessors": [
+            {"name": "ProportionalDiff", "args": ["close"]},
+            {"name": "ProportionalDiff", "args": ["DJIA_close"]},
+            {"name": "ProportionalDiff", "args": ["COMP_close"]}
+        ]
+    },
+    "model": {
+        "type": "NeuralNetwork",
+        "layers": [
+            {"type": "Flatten"},
+            {"type": "Linear", "args": [378, 252]},
+            {"type": "ReLU"},
+            {"type": "Linear", "args": [252, 126]},
+            {"type": "ReLU"},
+            {"type": "Linear", "args": [126, 21]}
+        ]
+    }
+}

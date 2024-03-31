@@ -17,8 +17,8 @@ def train(args):
     valid_file = f"{args.data_path}/{args.dataset}_valid.parquet"
     supp_file = f"{args.data_path}/{args.dataset}_supplementary.parquet"
     preprocs = args.model_config["data"]["preprocessors"]
-    train_loader = DataLoader(dataset.StockData(train_file, supp_file, preprocs), batch_size=64, shuffle=True)
-    valid_loader = DataLoader(dataset.StockData(valid_file, supp_file, preprocs), batch_size=64)
+    train_loader = DataLoader(dataset.StockData(train_file, supp_file, preprocs, sample=0.05), batch_size=64)
+    valid_loader = DataLoader(dataset.StockData(valid_file, supp_file, preprocs, sample=0.05), batch_size=64)
     model.train(train_loader, valid_loader)
 
 
@@ -35,11 +35,7 @@ def read_model_config(file: str):
     """
     with open(file) as f:
         conf = json.load(f)
-        preprocs = conf["data"]["preprocessors"]
-        for i in range(len(preprocs)):
-            assert len(preprocs[i]) == 1, "Each preprocessor should consist of one column and one preprocessor function"
-            for k, v in preprocs[i].items():
-                preprocs[i] = (k, dataset.getPreproc(v))
+        conf["data"]["preprocessors"] = [dataset.getPreproc(**preproc) for preproc in conf["data"]["preprocessors"]]
         return conf
 
 

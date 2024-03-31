@@ -1,62 +1,67 @@
-import pandas as pd
-import numpy as np
+import polars as pl
 import torch
+import random
 from torch.utils.data import Dataset
 
-from . import gen_dataset
 
 INPUT_DAYS = 126  # Number of days stock market is open in 6 months
 OUTPUT_DAYS = 21  # Average number of days stock market is open in 1 month
 TOTAL_DAYS = INPUT_DAYS + OUTPUT_DAYS
 
 
-def minMaxScaler(data: np.array):
+def minMaxScaler(column: str):
     """
-    Preprocesses data by min-max scaling
+    Returns a polars expression for preprocessing a column with min-max scaling
     Params:
-      - data: Array containing stock data
-    Return: Array of scaled data
+      - column: column name
+    Return: Polars expression for min-max scaling the column
     """
-    max = np.max(data)
-    min = np.min(data)
-    return (data - min) / (max - min)
+    col = pl.col(column)
+    return ((col - col.min()) / (col.max() - col.min())).alias(column)
 
 
-def proportionalDiff(data: np.array):
+def proportionalDiff(column: str):
     """
-    Preprocesses data by proportional difference from start
+    Returns a polars expression for preprocessing a column with proportional difference from start
     Params:
-      - data: Array containing stock data
-    Return: Array of scaled data
+      - column: column name
+    Return: Polars expression for proportional diff scaling the column
     """
-    return (data / data[0]) - 1
+    col = pl.col(column)
+    return ((col / col.first()) - 1).alias(column)
 
 
-def proportionalDiffConsecutive(data: np.array):
+def proportionalDiffConsecutive(column: str):
     """
-    Preprocesses data by proportional difference from the previous value
+    Returns a polars expression for preprocessing a column with proportional difference from previous
     Params:
-      - data: Array containing stock data
-    Return: Array of scaled data
+      - column: column name
+    Return: Polars expression for consecutive proportional diff scaling the column
     """
-    return np.concatenate(([0], (data[1:] / data[:-1]) - 1))
+    col = pl.col(column)
+    return ((col / col.shift(fill_value=col.first())) - 1).alias(column)
 
 
-def getPreproc(name: str):
+def getPreproc(name: str, args: list):
     """
-    Get one of the preprocessor functions by name
+    Get a preprocessing expression
     Params:
       - name: The name of the preprocessor function
-    Return: The specified function (or raises error if none matched)
+      - args: The list of inputs to the preprocessor function
+    Return: A preprocessing expression (or raises error if none matched)
     """
-    if name == "MinMaxScaler":
-        return minMaxScaler
-    elif name == "ProportionalDiff":
-        return proportionalDiff
-    elif name == "ProportionalDiffConsecutive":
-        return proportionalDiffConsecutive
+    functions = {"MinMaxScaler": minMaxScaler, "ProportionalDiff": proportionalDiff, "ProportionalDiffConsecutive": proportionalDiffConsecutive}
+    if name in functions:
+        return functions[name](*args)
     else:
         raise ValueError(f"No preprocessor found with name {name}")
+
+
+def doubleToFloat(df: pl.DataFrame):
+    for col in df.columns:  # Cast all float64 data to float32
+        if df[col].dtype == pl.Float64:
+            df = df.with_columns(pl.col(col).cast(pl.Float32))
+    return df
 
 
 class StockData(Dataset):
@@ -64,63 +69,65 @@ class StockData(Dataset):
     Dataset that loads the stock data and supplementary data according to the provided options
     """
 
-    def __init__(self, data_file: str, supp_file: str, preprocessors: list[tuple]):
+    def __init__(self, data_file: str, supp_file: str, preprocessors: list[tuple], sample=1.0):
         """
         Sets up dataset
         Params:
           - data_file: The parquet file to load data from
           - supp_file: The parquet file containing supplementary data
           - preprocessors: List of columns and functions for preprocessing them
+          - sample: The proportion of data to use each epoch
         """
-        self.data = pd.read_parquet(data_file)
+        self.data = doubleToFloat(pl.read_parquet(data_file).reverse())  # put dates in ascending order
         self.preprocessors = preprocessors
-        self.pairs = []
-        for stock in gen_dataset.get_tickers(self.data):
-            self.pairs += [(stock, i) for i in range(0, len(self.data.loc[stock]) - TOTAL_DAYS + 1)]
-        supp_table = pd.read_parquet(supp_file)
+        self.sample = sample
+        counts = self.data.group_by("ticker").agg(pl.count())
+        self.offsets = []
+        for ticker, count in counts.rows():
+            offset = self.data.with_row_index().filter(pl.col("ticker") == ticker)["index"][0]
+            self.offsets += [offset + i for i in range(0, count - TOTAL_DAYS + 1)]
+
+        supp_table = doubleToFloat(pl.read_parquet(supp_file).reverse())  # put dates in ascending order
         self.supp_data = {}
-        for ticker in gen_dataset.get_tickers(supp_table):
-            self.supp_data[ticker] = supp_table.loc[ticker]
+        self.supp_data_indices = {}
+        for ticker in supp_table["ticker"].unique():
+            df = supp_table.filter(pl.col("ticker") == ticker)
+            indices = {}
+            for idx, date in enumerate(df["date"]):
+                indices[date] = idx
+            self.supp_data_indices[ticker] = indices
+            self.supp_data[ticker] = df.rename(lambda n: f"{ticker}_{n}").lazy()
+
+        self.shuffle()
 
     def __len__(self):
         """
         Get the number of elements in the dataset
         """
-        return len(self.pairs)
+        return int(len(self.offsets) * self.sample)
 
     def __getitem__(self, idx):
         """
         Get a preprocessed element of the dataset by index
         """
-        ticker, start_idx = self.pairs[idx]
-        stock_info = self.data.loc[ticker][start_idx : start_idx + TOTAL_DAYS][::-1]  # reverse order so low index is older
-        labelScale = stock_info.iloc[0]["close"]
-        label = (stock_info[INPUT_DAYS:]["close"] / labelScale) - 1
-        data = stock_info[:INPUT_DAYS]
-        supp_data = {}
-        for ticker, table in self.supp_data.items():
-            loc = table.index.get_loc(data.index[0])
-            supp_data[ticker] = table[loc : loc + INPUT_DAYS][::-1]
-        return self.processData(data, supp_data), label.to_numpy(dtype=np.float32), {"scale": labelScale}
+        offset = self.offsets[idx]
+        stock_info = self.data[offset : offset + INPUT_DAYS]
+        stock_info_lazy = stock_info.lazy()
+        start_close = stock_info["close"][0]
+        labels = (self.data["close"][offset + INPUT_DAYS : offset + TOTAL_DAYS].to_numpy().flatten() / start_close) - 1
 
-    def processData(self, data: pd.DataFrame, supp: dict[str, pd.DataFrame]):
+        for ticker, frame in self.supp_data.items():
+            supp_offset = self.supp_data_indices[ticker][stock_info["date"][0]]
+            stock_info_lazy = pl.concat([stock_info_lazy, frame[supp_offset : supp_offset + INPUT_DAYS]], how="horizontal")
+
+        out_df = stock_info_lazy.select(*self.preprocessors).collect()
+        return out_df.to_numpy().transpose(), labels, {"scale": start_close}
+
+    def shuffle(self):
         """
-        Apply preprocessing functions to given data
-        Params:
-          - data: Dataframe containing the data to preprocess
-          - supp: dictionary of tickers to supplemental DataFrames for preprocessing
-        Returns: Preprocessed data (input for model)
+        Shuffle the data so the sample refers to different data
         """
-        out = np.zeros((len(self.preprocessors), INPUT_DAYS), dtype=np.float32)
-        for i, (feature_name, preprocFunc) in enumerate(self.preprocessors):
-            if "_" in feature_name:  # supplemental
-                ticker, feature = feature_name.split("_")
-                out[i, :] = preprocFunc(supp[ticker][feature])
-            else:
-                out[i, :] = preprocFunc(data[feature_name])
-        if out.shape[0] == 1:
-            out = out.reshape(out.shape[1])
-        return out
+        random.shuffle(self.offsets)
 
     def unscaleLabels(self, labels, unscale_params: dict):
         """
