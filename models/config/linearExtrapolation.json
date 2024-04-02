@@ -1,0 +1,10 @@
+{
+    "data": {
+        "preprocessors": [
+            {"name": "ProportionalDiff", "args": ["close"]}
+        ]
+    },
+    "model": {
+        "type": "LinearExtrapolation"
+    }
+}

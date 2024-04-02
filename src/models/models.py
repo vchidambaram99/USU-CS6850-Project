@@ -1,8 +1,10 @@
 import torch
 import os
 import pickle
+import numpy as np
 from torch import nn
 from torch.utils.data import DataLoader
+from sklearn.linear_model import LinearRegression
 
 
 class NeuralModel:
@@ -151,6 +153,63 @@ class ConfigurableNetwork(nn.Module):
         return x
 
 
+class LinearExtrapolationModel:
+    """
+    Linear extrapolation baseline model
+    Note that this model only works if the preprocessed inputs can be extrapolated directly to the outputs
+    """
+
+    def __init__(self):
+        """
+        Init function
+        """
+        pass
+
+    def train(
+        self,
+        train_loader: DataLoader,
+        valid_loader: DataLoader,
+    ):
+        """
+        Train the model. Since this model requires no training, just evaluate it on both sets
+        Params:
+          - train_loader: Data loader for the training dataset
+          - valid_loader: Data loader for the validation dataset
+        """
+        print(f"Loss on training set: {self.eval(train_loader)}")
+        print(f"Loss on validation set: {self.eval(valid_loader)}")
+
+    def eval(self, test_loader: DataLoader, loss_fn=nn.MSELoss()):
+        """
+        Evaluate the model on a dataset
+        Params:
+          - test_loader: Data loader for dataset to evaluate on
+          - loss_fn: The loss function to evaluate
+        Returns: Average loss
+        """
+        total_loss = 0
+        size = len(test_loader.dataset)
+        with torch.no_grad():
+            for _, (X, y, unscale_params) in enumerate(test_loader):
+                # Compute prediction error on preprocessed data
+                pred = torch.zeros(y.shape)
+                for i in range(len(X)):
+                    # Build model for extrapolation
+                    model = LinearRegression()
+                    xs = np.arange(len(X[i][0])).reshape(-1, 1)
+                    ys = X[i][0].numpy()
+                    model.fit(xs, ys)
+
+                    # Extrapolate for predictions
+                    xs = (np.arange(len(y[i])) + len(X[i][0])).reshape(-1, 1)
+                    predictions = model.predict(xs)
+                    pred[i] = torch.Tensor(predictions)
+
+                # Calculate loss
+                total_loss += loss_fn(pred, y).item() * len(X)
+        return total_loss / size
+
+
 def load_model(model_config: dict, model_file: str):
     """
     Get a model wrapper by configuration and optionally the file it should be stored at
@@ -166,5 +225,7 @@ def load_model(model_config: dict, model_file: str):
             if os.path.exists(model_file):
                 network.load_state_dict(torch.load(model_file))
             return NeuralModel(network, model_file)
+        case "LinearExtrapolation":
+            return LinearExtrapolationModel()
         case _:
             raise ValueError(f"No model of type '{model_type}'")

@@ -1,0 +1,22 @@
+{
+    "data": {
+        "preprocessors": [
+            {"name": "ProportionalDiff", "args": ["close"]},
+            {"name": "ProportionalDiff", "args": ["DJIA_close"]},
+            {"name": "ProportionalDiff", "args": ["COMP_close"]}
+        ]
+    },
+    "model": {
+        "type": "NeuralNetwork",
+        "layers": [
+            {"type": "Conv1d", "args": [3, 3, 3]},
+            {"type": "ReLU"},
+            {"type": "Conv1d", "args": [3, 3, 3]},
+            {"type": "ReLU"},
+            {"type": "Flatten"},
+            {"type": "Linear", "args": [366, 122]},
+            {"type": "ReLU"},
+            {"type": "Linear", "args": [122, 21]}
+        ]
+    }
+}
