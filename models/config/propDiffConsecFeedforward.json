@@ -1,0 +1,18 @@
+{
+    "data": {
+        "preprocessors": [
+            {"name": "ProportionalDiffConsecutive", "args": ["close"]}
+        ]
+    },
+    "model": {
+        "type": "NeuralNetwork",
+        "layers": [
+            {"type": "Flatten"},
+            {"type": "Linear", "args": [126, 126]},
+            {"type": "ReLU"},
+            {"type": "Linear", "args": [126, 21]},
+            {"type": "ReLU"},
+            {"type": "Linear", "args": [21, 21]}
+        ]
+    }
+}

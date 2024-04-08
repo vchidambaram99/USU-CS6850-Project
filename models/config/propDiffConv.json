@@ -1,0 +1,18 @@
+{
+    "data": {
+        "preprocessors": [
+            {"name": "ProportionalDiff", "args": ["close"]}
+        ]
+    },
+    "model": {
+        "type": "NeuralNetwork",
+        "layers": [
+            {"type": "Conv1d", "args": [1, 3, 5]},
+            {"type": "ReLU"},
+            {"type": "Flatten"},
+            {"type": "Linear", "args": [366, 122]},
+            {"type": "ReLU"},
+            {"type": "Linear", "args": [122, 21]}
+        ]
+    }
+}

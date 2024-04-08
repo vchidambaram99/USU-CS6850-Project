@@ -125,6 +125,15 @@ class NeuralModel:
         return total_loss / size
 
 
+class PermuteLayer(nn.Module):
+    def __init__(self, permutation):
+        super().__init__()
+        self.permutation = permutation
+
+    def forward(self, x):
+        return torch.permute(x, self.permutation)
+
+
 class ConfigurableNetwork(nn.Module):
     """
     NeuralNetwork configurable by JSON file
@@ -139,7 +148,10 @@ class ConfigurableNetwork(nn.Module):
         super().__init__()
         self.layers = nn.ModuleList()
         for layer in model_config["layers"]:
-            LayerClass = getattr(nn, layer["type"])
+            if layer["type"] == "PermuteLayer":
+                LayerClass = PermuteLayer
+            else:
+                LayerClass = getattr(nn, layer["type"])
             self.layers.append(LayerClass(*layer.get("args", []), **layer.get("kwargs", {})))
 
     def forward(self, x):
@@ -149,7 +161,10 @@ class ConfigurableNetwork(nn.Module):
           - x: The input variables
         """
         for layer in self.layers:
-            x = layer(x)
+            if type(layer) is nn.LSTM:  # LSTM returns (output, hidden state)
+                x = layer(x)[0]
+            else:
+                x = layer(x)
         return x
 
 

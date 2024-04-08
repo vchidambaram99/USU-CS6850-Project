@@ -1,0 +1,21 @@
+{
+    "data": {
+        "preprocessors": [
+            {"name": "ProportionalDiff", "args": ["close"]}
+        ]
+    },
+    "model": {
+        "type": "NeuralNetwork",
+        "layers": [
+            {"type": "PermuteLayer", "args": [[0, 2, 1]]},
+            {"type": "LSTM", "args": [1, 3], "kwargs": {"batch_first": true, "bidirectional": true}},
+            {"type": "ReLU"},
+            {"type": "Flatten"},
+            {"type": "Linear", "args": [756, 378]},
+            {"type": "ReLU"},
+            {"type": "Linear", "args": [378, 126]},
+            {"type": "ReLU"},
+            {"type": "Linear", "args": [126, 21]}
+        ]
+    }
+}

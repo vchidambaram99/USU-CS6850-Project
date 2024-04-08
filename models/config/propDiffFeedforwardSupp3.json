@@ -1,0 +1,32 @@
+{
+    "data": {
+        "preprocessors": [
+            {"name": "ProportionalDiff", "args": ["close"]},
+            {"name": "ProportionalDiff", "args": ["open"]},
+            {"name": "ProportionalDiff", "args": ["high"]},
+            {"name": "ProportionalDiff", "args": ["low"]},
+            {"name": "ProportionalDiff", "args": ["volume"]},
+            {"name": "ProportionalDiff", "args": ["DJIA_close"]},
+            {"name": "ProportionalDiff", "args": ["DJIA_open"]},
+            {"name": "ProportionalDiff", "args": ["DJIA_low"]},
+            {"name": "ProportionalDiff", "args": ["DJIA_high"]},
+            {"name": "ProportionalDiff", "args": ["COMP_close"]},
+            {"name": "ProportionalDiff", "args": ["COMP_open"]},
+            {"name": "ProportionalDiff", "args": ["COMP_low"]},
+            {"name": "ProportionalDiff", "args": ["COMP_high"]}
+        ]
+    },
+    "model": {
+        "type": "NeuralNetwork",
+        "layers": [
+            {"type": "Flatten"},
+            {"type": "Linear", "args": [1638, 546]},
+            {"type": "ReLU"},
+            {"type": "Linear", "args": [546, 273]},
+            {"type": "ReLU"},
+            {"type": "Linear", "args": [273, 91]},
+            {"type": "ReLU"},
+            {"type": "Linear", "args": [91, 21]}
+        ]
+    }
+}

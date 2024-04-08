@@ -1,0 +1,23 @@
+{
+    "data": {
+        "preprocessors": [
+            {"name": "ProportionalDiff", "args": ["close"]},
+            {"name": "ProportionalDiff", "args": ["DJIA_close"]},
+            {"name": "ProportionalDiff", "args": ["COMP_close"]},
+            {"name": "ProportionalDiff", "args": ["open"]},
+            {"name": "ProportionalDiff", "args": ["DJIA_open"]},
+            {"name": "ProportionalDiff", "args": ["COMP_open"]}
+        ]
+    },
+    "model": {
+        "type": "NeuralNetwork",
+        "layers": [
+            {"type": "Flatten"},
+            {"type": "Linear", "args": [756, 378]},
+            {"type": "ReLU"},
+            {"type": "Linear", "args": [378, 378]},
+            {"type": "ReLU"},
+            {"type": "Linear", "args": [378, 21]}
+        ]
+    }
+}
