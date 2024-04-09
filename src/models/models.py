@@ -44,21 +44,23 @@ class NeuralModel:
           - loss_fn: The loss function to optimize
           - optimizer: The optimizer to use on the model
         """
-        losses = self.load_losses()
-        if len(losses) == 0:
+        training_losses, valid_losses = self.load_losses()
+        trained_epochs = len(training_losses)
+        if trained_epochs == 0:
             best_valid_loss = self.eval(valid_loader, loss_fn)
             best_epoch = 0
-            losses.append(best_valid_loss)
+            valid_losses.append(best_valid_loss)
         else:
-            best_valid_loss = min(losses)
-            best_epoch = losses.index(best_valid_loss)
-        stop_count = 0
+            best_valid_loss = min(valid_losses)
+            best_epoch = valid_losses.index(best_valid_loss)  # note: 0 here is before training
+
         optimizer = optimizer(self.model.parameters())
-        for epoch in range(max_epochs):
+        for epoch in range(trained_epochs, max_epochs):
             print(f"Epoch {epoch + 1}:")
             train_loader.dataset.shuffle()
             size = len(train_loader.dataset)
             current = 0
+            train_loss = 0
             self.model.train()
             for batch, (X, y, _) in enumerate(train_loader):
                 # Compute prediction error
@@ -69,6 +71,7 @@ class NeuralModel:
                 loss.backward()
                 optimizer.step()
                 optimizer.zero_grad()
+                train_loss += loss.item() * len(X)
 
                 # Print progress every 100 batches
                 current += len(X)
@@ -76,35 +79,38 @@ class NeuralModel:
                     loss = loss.item()
                     print(f"  loss: {loss:.5f}\t[{current-len(X)}-{current}/{size}]")
 
+            training_losses.append(train_loss / len(train_loader.dataset))
+            print(f"  Training loss: {training_losses[-1]}")
+
             # Evaluate on validation set to determine if training should be stopped early
             valid_loader.dataset.shuffle()
             valid_loss = self.eval(valid_loader)
-            losses.append(valid_loss)
+            valid_losses.append(valid_loss)
             print(f"  Validation Loss: {valid_loss} (previous best {best_valid_loss} on epoch {best_epoch})")
+
+            if save_loss:
+                self.save_losses(training_losses, valid_losses)
+
             if valid_loss < best_valid_loss:
                 best_valid_loss = valid_loss
                 best_epoch = epoch + 1
-                stop_count = 0
                 torch.save(self.model.state_dict(), self.model_file)
                 print(f"  Saving updated model to {self.model_file}")
-                if save_loss:  # only save updated losses if the model itself is being saved
-                    self.save_losses(losses)
-            else:
-                stop_count += 1
-                if stop_count >= early_stop:
-                    print(f"  Exiting model training early after {epoch + 1} epochs")
-                    return
+            elif epoch - best_epoch + 1 >= early_stop:
+                print(f"  Exiting model training early after {epoch + 1} epochs")
+                return
 
-    def save_losses(self, loss):
+    def save_losses(self, train_losses, valid_losses):
         with open(f"{self.model_file}.loss", "wb") as f:
-            pickle.dump(loss, f)
+            pickle.dump({"train": train_losses, "valid": valid_losses}, f)
 
     def load_losses(self):
         try:
             with open(f"{self.model_file}.loss", "rb") as f:
-                return pickle.load(f)
+                losses = pickle.load(f)
+                return losses["train"], losses["valid"]
         except Exception:
-            return []
+            return [], []
 
     def eval(self, test_loader: DataLoader, loss_fn=nn.MSELoss()):
         """

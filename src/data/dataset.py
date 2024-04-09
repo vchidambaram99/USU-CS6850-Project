@@ -22,13 +22,13 @@ def minMaxScaler(column: str):
 
 def proportionalDiff(column: str):
     """
-    Returns a polars expression for preprocessing a column with proportional difference from start
+    Returns a polars expression for preprocessing a column with proportional difference from end
     Params:
       - column: column name
     Return: Polars expression for proportional diff scaling the column
     """
     col = pl.col(column)
-    return ((col / col.first()) - 1).alias(column)
+    return ((col / col.last()) - 1).alias(column)
 
 
 def proportionalDiffConsecutive(column: str):
@@ -113,15 +113,15 @@ class StockData(Dataset):
         offset = self.offsets[idx]
         stock_info = self.data[offset : offset + INPUT_DAYS]
         stock_info_lazy = stock_info.lazy()
-        start_close = stock_info["close"][0]
-        labels = (self.data["close"][offset + INPUT_DAYS : offset + TOTAL_DAYS].to_numpy().flatten() / start_close) - 1
+        end_close = stock_info["close"][-1]
+        labels = (self.data["close"][offset + INPUT_DAYS : offset + TOTAL_DAYS].to_numpy().flatten() / end_close) - 1
 
         for ticker, frame in self.supp_data.items():
             supp_offset = self.supp_data_indices[ticker][stock_info["date"][0]]
             stock_info_lazy = pl.concat([stock_info_lazy, frame[supp_offset : supp_offset + INPUT_DAYS]], how="horizontal")
 
         out_df = stock_info_lazy.select(*self.preprocessors).collect()
-        return out_df.to_numpy().transpose(), labels, {"scale": start_close}
+        return out_df.to_numpy().transpose(), labels, {"scale": end_close}
 
     def shuffle(self):
         """
