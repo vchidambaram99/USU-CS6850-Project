@@ -45,8 +45,7 @@ class NeuralModel:
           - optimizer: The optimizer to use on the model
         """
         training_losses, valid_losses = self.load_losses()
-        trained_epochs = len(training_losses)
-        if trained_epochs == 0:
+        if len(training_losses) == 0:
             best_valid_loss = self.eval(valid_loader, loss_fn)
             best_epoch = 0
             valid_losses.append(best_valid_loss)
@@ -54,8 +53,12 @@ class NeuralModel:
             best_valid_loss = min(valid_losses)
             best_epoch = valid_losses.index(best_valid_loss)  # note: 0 here is before training
 
+            # Clear old data not saved to the model
+            training_losses = training_losses[:best_epoch]
+            valid_losses = valid_losses[: best_epoch + 1]
+
         optimizer = optimizer(self.model.parameters())
-        for epoch in range(trained_epochs, max_epochs):
+        for epoch in range(best_epoch, max_epochs):
             print(f"Epoch {epoch + 1}:")
             train_loader.dataset.shuffle()
             size = len(train_loader.dataset)

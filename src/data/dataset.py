@@ -9,6 +9,17 @@ OUTPUT_DAYS = 21  # Average number of days stock market is open in 1 month
 TOTAL_DAYS = INPUT_DAYS + OUTPUT_DAYS
 
 
+def clean(e: pl.Expr, default: float = 0):
+    """
+    Clean an expression, removing NaNs and infinities
+    Params:
+      - e: An expression to clean
+      - default: The value to set in place of bad values
+    """
+    e = e.fill_nan(default)
+    return pl.when(e.is_infinite()).then(default).otherwise(e)
+
+
 def minMaxScaler(column: str):
     """
     Returns a polars expression for preprocessing a column with min-max scaling
@@ -17,7 +28,7 @@ def minMaxScaler(column: str):
     Return: Polars expression for min-max scaling the column
     """
     col = pl.col(column)
-    return ((col - col.min()) / (col.max() - col.min())).alias(column)
+    return clean((col - col.min()) / (col.max() - col.min()), default=0.5).alias(column)
 
 
 def proportionalDiff(column: str):
@@ -28,7 +39,7 @@ def proportionalDiff(column: str):
     Return: Polars expression for proportional diff scaling the column
     """
     col = pl.col(column)
-    return ((col / col.last()) - 1).alias(column)
+    return clean((col / col.last()) - 1).alias(column)
 
 
 def proportionalDiffConsecutive(column: str):
@@ -39,7 +50,7 @@ def proportionalDiffConsecutive(column: str):
     Return: Polars expression for consecutive proportional diff scaling the column
     """
     col = pl.col(column)
-    return ((col / col.shift(fill_value=col.first())) - 1).alias(column)
+    return clean((col / col.shift(fill_value=col.first())) - 1).alias(column)
 
 
 def getPreproc(name: str, args: list):
@@ -121,6 +132,10 @@ class StockData(Dataset):
             stock_info_lazy = pl.concat([stock_info_lazy, frame[supp_offset : supp_offset + INPUT_DAYS]], how="horizontal")
 
         out_df = stock_info_lazy.select(*self.preprocessors).collect()
+        for column in out_df.columns:
+            if out_df[column].is_nan().any():
+                print(f"Null in column {column}")
+                print(stock_info_lazy.collect())
         return out_df.to_numpy().transpose(), labels, {"scale": end_close}
 
     def shuffle(self):
