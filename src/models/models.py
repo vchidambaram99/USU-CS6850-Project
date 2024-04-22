@@ -233,6 +233,9 @@ class LinearExtrapolationModel:
                 total_loss += loss_fn(pred, y).item() * len(X)
         return total_loss / size
 
+    def load_losses(self):
+        return [], []
+
 
 def load_model(model_config: dict, model_file: str):
     """

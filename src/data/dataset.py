@@ -109,8 +109,6 @@ class StockData(Dataset):
             self.supp_data_indices[ticker] = indices
             self.supp_data[ticker] = df.rename(lambda n: f"{ticker}_{n}").lazy()
 
-        self.shuffle()
-
     def __len__(self):
         """
         Get the number of elements in the dataset

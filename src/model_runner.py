@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import pickle
 from data import dataset
 from models import models
 from torch.utils.data import DataLoader
@@ -23,7 +24,25 @@ def train(args):
 
 
 def test(args):
-    pass
+    model = models.load_model(args.model_config["model"], args.model_file)
+    train_losses, valid_losses = model.load_losses()
+    test_losses = {}
+    train_file = f"{args.data_path}/{args.dataset}_train.parquet"
+    valid_file = f"{args.data_path}/{args.dataset}_valid.parquet"
+    test_file = f"{args.data_path}/{args.dataset}_test.parquet"
+    supp_file = f"{args.data_path}/{args.dataset}_supplementary.parquet"
+    preprocs = args.model_config["data"]["preprocessors"]
+    train_loader = DataLoader(dataset.StockData(train_file, supp_file, preprocs), batch_size=64)
+    valid_loader = DataLoader(dataset.StockData(valid_file, supp_file, preprocs), batch_size=64)
+    test_loader = DataLoader(dataset.StockData(test_file, supp_file, preprocs), batch_size=64)
+    test_losses["train"] = model.eval(train_loader)
+    print(f"Model: {args.model_file}, train error: {test_losses['train']}")
+    test_losses["valid"] = model.eval(valid_loader)
+    print(f"Model: {args.model_file}, valid error: {test_losses['valid']}")
+    test_losses["test"] = model.eval(test_loader)
+    print(f"Model: {args.model_file}, test error: {test_losses['test']}")
+    with open(f"{args.model_file}.loss", "wb") as f:
+        pickle.dump({"train": train_losses, "valid": valid_losses, "test": test_losses}, f)
 
 
 def read_model_config(file: str):
