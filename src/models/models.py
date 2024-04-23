@@ -133,6 +133,17 @@ class NeuralModel:
                 total_loss += loss_fn(pred, y).item() * len(X)
         return total_loss / size
 
+    def predict(self, X):
+        """
+        Evaluate the model on a single input
+        Params:
+          - X: The input
+        Returns: Model output
+        """
+        self.model.eval()
+        with torch.no_grad():
+            return self.model(X)
+
 
 class PermuteLayer(nn.Module):
     def __init__(self, permutation):
@@ -232,6 +243,27 @@ class LinearExtrapolationModel:
                 # Calculate loss
                 total_loss += loss_fn(pred, y).item() * len(X)
         return total_loss / size
+
+    def predict(self, X):
+        """
+        Evaluate the model on a single input
+        Params:
+          - X: The input
+        Returns: Model output
+        """
+        pred = torch.zeros((len(X), 21))
+        for i in range(len(X)):
+            # Build model for extrapolation
+            model = LinearRegression()
+            xs = np.arange(len(X[i][0])).reshape(-1, 1)
+            ys = X[i][0].numpy()
+            model.fit(xs, ys)
+
+            # Extrapolate for predictions
+            xs = (np.arange(21) + len(X[i][0])).reshape(-1, 1)
+            predictions = model.predict(xs)
+            pred[i] = torch.Tensor(predictions)
+        return pred
 
     def load_losses(self):
         return [], []
